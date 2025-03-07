@@ -9,14 +9,15 @@ import { getOrderCreatedWebhook } from "./webhooks/order-created";
 const app = new Hono<{ Bindings: Bindings }>();
 app.get("/manifest", c => createManifestHandler({
   async manifestFactory({ appBaseUrl }) {
+    const uuid = crypto.randomUUID();
     return {
-      name: 'Saleor App Template',
+      name: `Test app - ${uuid}`,
       tokenTargetUrl: `${appBaseUrl}/api/register`,
       appUrl: `${appBaseUrl}/app`,
       permissions: [
         "MANAGE_ORDERS",
       ],
-      id: "saleor.app.hono",
+      id: `saleor.app.stress-test:${uuid}`,
       version: packageJson.version,
       webhooks: [
         getOrderCreatedWebhook(c).getWebhookManifest(appBaseUrl)
