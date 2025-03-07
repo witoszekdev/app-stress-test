@@ -1,0 +1,30 @@
+config:
+  target: "{{ $processEnvironment.SALEOR_GRAPHQL_URL }}"
+  phases:
+    - duration: 100
+      arrivalRate: 1
+      name: "One request per second"
+  processor: "./processor.mjs"
+  ensure:
+    maxErrorRate: 1
+  plugins:
+    metrics-by-endpoint: {}
+  reporting:
+    - json: { export: "results.json" }
+
+scenarios:
+  - name: "GraphQL Query Timing Test"
+    afterResponse: "afterResponse"
+    flow:
+      - post:
+          url: "/"
+          headers:
+            Content-Type: "application/json"
+            Authorization: "Bearer {{ $processEnvironment.AUTH_TOKEN }}"
+          json:
+            query: "{{query}}"
+          capture:
+            - json: "$.data"
+              as: "responseData"
+          expect:
+            - statusCode: 200

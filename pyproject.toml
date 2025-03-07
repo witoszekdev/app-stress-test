@@ -1,0 +1,18 @@
+[project]
+name = "app-stress-test"
+package-mode = false
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Jonatan Witoszek",email = "jonatanwitoszek@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gql[all] (>=3.5.2,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
