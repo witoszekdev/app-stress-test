@@ -33,5 +33,10 @@ SALEOR_GRAPHQL_URL=<saleorApiUrl> AUTH_TOKEN=<user_token> python3 mass_install
 ### Run performance test
 
 ```shell
-SALEOR_GRAPHQL_URL=<saleorApiUrl> AUTH_TOKEN=<user_token> pnpm run run:performance-test
+SALEOR_GRAPHQL_URL=<saleorApiUrl> AUTH_TOKEN=<user_token> pnpm run performance:simple
+SALEOR_GRAPHQL_URL=<saleorApiUrl> AUTH_TOKEN=<user_token> pnpm run performance:full
 ```
+
+> [!CAUTION]
+> Remove trailing slash from SALEOR_GRAPHQL_URL when running artillery tests!
+> Example: `SALEOR_GRAPHQL_URL=https://example.com/graphql`

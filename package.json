@@ -10,7 +10,8 @@
     "fetch-schema": "curl https://raw.githubusercontent.com/saleor/saleor/${npm_package_saleor_schemaVersion}/saleor/graphql/schema.graphql > graphql/schema.graphql",
     "generate": "graphql-codegen",
     "format": "prettier --write .",
-    "run:performance-test": "artillery run app-list-fetch.yaml"
+    "performance:simple": "artillery run --config config.yaml scenarios/simple-query.yaml --record",
+    "performance:full": "artillery run --config config.yaml scenarios/full-query.yaml --record"
   },
   "saleor": {
     "schemaVersion": "3.20"

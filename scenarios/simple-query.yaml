@@ -1,0 +1,30 @@
+scenarios:
+  - name: "Simple Query Without Webhooks"
+    flow:
+      - post:
+          url: "/"
+          headers:
+            Content-Type: "application/json"
+            Authorization: "Bearer {{ $processEnvironment.AUTH_TOKEN }}"
+          json:
+            query: |
+              {
+                apps(first: 100) {
+                  edges {
+                    node {
+                      id
+                      name
+                      created
+                      isActive
+                      type
+                      brand {
+                        logo {
+                          default(format: WEBP, size: 24)
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+          expect:
+            - statusCode: 200

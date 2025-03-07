@@ -1,0 +1,12 @@
+config:
+  target: "{{ $processEnvironment.SALEOR_GRAPHQL_URL }}"
+  phases:
+    - duration: 100
+      arrivalRate: 1
+      name: "One request per second"
+  ensure:
+    maxErrorRate: 1
+  plugins:
+    metrics-by-endpoint: {}
+  reporting:
+    - json: { export: "results.json" }
