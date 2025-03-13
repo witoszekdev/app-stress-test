@@ -81,7 +81,7 @@ async def main():
         raise Exception("Please provide an AUTH_TOKEN environment variable")
 
     # Execute 100 mutations concurrently
-    tasks = [execute_mutation(url, token, i) for i in range(100)]
+    tasks = [execute_mutation(url, token, i) for i in range(30)]
     results = await asyncio.gather(*tasks)
 
     # Count successful queries
