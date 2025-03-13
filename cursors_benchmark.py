@@ -35,23 +35,10 @@ query Apps($cursor: String) {
 }
 """
 
+
 # Query for fetching detailed app data (edges with id and name)
 PARALLEL_QUERY = """
 query Apps($cursor: String) {
-  plugins(first: 100) {
-    edges {
-      node {
-        id
-        name
-        globalConfiguration {
-          active
-        }
-        channelConfigurations {
-          active
-        }
-      }
-    }
-  }
   apps(first: 10, after: $cursor) {
     edges {
       node {
@@ -114,6 +101,26 @@ query Apps($cursor: String) {
 }
 """
 
+# Query for fetching plugins data
+PLUGINS_QUERY = """
+query Plugins {
+  plugins(first: 100) {
+    edges {
+      node {
+        id
+        name
+        globalConfiguration {
+          active
+        }
+        channelConfigurations {
+          active
+        }
+      }
+    }
+  }
+}
+"""
+
 # Number of times to run the benchmark
 NUM_RUNS = 50
 
@@ -125,6 +132,7 @@ JITTER_FACTOR = 0.2  # Add randomness to backoff time
 
 fetch_cursors_query = gql(SEQUENTIAL_QUERY)
 fetch_details_query = gql(PARALLEL_QUERY)
+fetch_plugins_query = gql(PLUGINS_QUERY)
 
 
 class RateLimitException(Exception):
@@ -173,13 +181,17 @@ def is_rate_limit_error(error):
     )
 
 
-async def execute_with_retry(session, query, variables):
+async def execute_with_retry(session, query, variables=None):
     """
     Execute a GraphQL query with retry logic for rate limiting.
     Raises RateLimitException if rate limiting occurred during execution.
     """
+    if variables is None:
+        variables = {}
+
     retries = 0
     rate_limited = False
+    result = None
 
     while True:
         try:
@@ -240,13 +252,14 @@ async def fetch_all_cursors(session):
         except RateLimitException:
             was_rate_limited = True
             # Continue with the query that succeeded after rate limiting
-            end_cursor = result["apps"]["pageInfo"]["endCursor"]
+            if result is not None:
+                end_cursor = result["apps"]["pageInfo"]["endCursor"]
 
-            if end_cursor:
-                cursors.append(end_cursor)
-                current_cursor = end_cursor
-            else:
-                break
+                if end_cursor:
+                    cursors.append(end_cursor)
+                    current_cursor = end_cursor
+                else:
+                    break
 
     return cursors, was_rate_limited
 
@@ -261,14 +274,35 @@ async def fetch_page_data(session, cursor, semaphore):
 
     async with semaphore:
         variables = {"cursor": cursor}
-        result = None
         try:
             result = await execute_with_retry(session, fetch_details_query, variables)
             return result["apps"]["edges"], was_rate_limited
         except RateLimitException:
             was_rate_limited = True
             # Return the result that succeeded after rate limiting
-            return result["apps"]["edges"], was_rate_limited
+            if result is not None:
+                return result["apps"]["edges"], was_rate_limited
+            else:
+                return [], was_rate_limited
+
+
+async def fetch_plugins_data(session):
+    """
+    This function fetches plugins data in parallel with the apps data.
+    Returns a tuple of (plugins_data, was_rate_limited)
+    """
+    was_rate_limited = False
+
+    try:
+        result = await execute_with_retry(session, fetch_plugins_query)
+        return result["plugins"]["edges"], was_rate_limited
+    except RateLimitException:
+        was_rate_limited = True
+        # Return the result that succeeded after rate limiting
+        if result is not None:
+            return result["plugins"]["edges"], was_rate_limited
+        else:
+            return [], was_rate_limited
 
 
 async def run_benchmark():
@@ -276,6 +310,7 @@ async def run_benchmark():
     # Initialize timing variables
     cursor_fetch_time = 0
     data_fetch_time = 0
+    plugins_fetch_time = 0
 
     url = os.environ.get("SALEOR_GRAPHQL_URL", "http://localhost:8000/graphql/")
     token = os.environ.get("AUTH_TOKEN")
@@ -304,23 +339,35 @@ async def run_benchmark():
 
             logger.info(f"Collected {len(cursors)} cursors")
 
-            # Step 2: Launch concurrent requests for detailed data, limiting to 10 at a time.
+            # Step 2: Launch concurrent requests for detailed data and plugins data
             data_fetch_start = time.perf_counter()
             semaphore = asyncio.Semaphore(10)
 
             # Create tasks for fetching page data
-            tasks = []
+            page_tasks = []
             for cursor in cursors:
-                tasks.append(fetch_page_data(session, cursor, semaphore))
+                page_tasks.append(fetch_page_data(session, cursor, semaphore))
 
-            # Execute all tasks
-            results = await asyncio.gather(*tasks, return_exceptions=False)
+            # Create task for fetching plugins data
+            plugins_fetch_start = time.perf_counter()
+            plugins_task = fetch_plugins_data(session)
 
-            # Process results and check if any rate limiting occurred
+            # Execute all tasks concurrently
+            all_results = await asyncio.gather(
+                *page_tasks, plugins_task, return_exceptions=False
+            )
+
+            # Process page results
             pages = []
             rate_limited_during_data = False
 
-            for page_data, was_rate_limited in results:
+            # The last result is from the plugins task
+            plugins_result, plugins_rate_limited = all_results[-1]
+            plugins_fetch_end = time.perf_counter()
+            plugins_fetch_time = plugins_fetch_end - plugins_fetch_start
+
+            # Process page results (all except the last one)
+            for page_data, was_rate_limited in all_results[:-1]:
                 pages.append(page_data)
                 if was_rate_limited:
                     rate_limited_during_data = True
@@ -337,6 +384,13 @@ async def run_benchmark():
                 data_fetch_end = time.perf_counter()
                 data_fetch_time = data_fetch_end - data_fetch_start
 
+            # If rate limited during plugins fetching
+            if plugins_rate_limited:
+                logger.info(
+                    "Rate limiting occurred during plugins fetching. Resetting timer."
+                )
+                plugins_fetch_time = None
+
             # Aggregate all the app nodes from each page.
             apps = []
             for page in pages:
@@ -344,8 +398,18 @@ async def run_benchmark():
                     node = edge.get("node", {})
                     apps.append(node)
 
+            # Aggregate all plugin nodes
+            plugins = []
+            for edge in plugins_result:
+                node = edge.get("node", {})
+                plugins.append(node)
+
             # Calculate total execution time only if no rate limiting occurred
-            if not rate_limited_during_cursors and not rate_limited_during_data:
+            if (
+                not rate_limited_during_cursors
+                and not rate_limited_during_data
+                and not plugins_rate_limited
+            ):
                 total_execution_time = cursor_fetch_time + (data_fetch_time or 0)
             else:
                 total_execution_time = None
@@ -353,11 +417,14 @@ async def run_benchmark():
             return {
                 "cursor_fetch_time": cursor_fetch_time,
                 "data_fetch_time": data_fetch_time,
+                "plugins_fetch_time": plugins_fetch_time,
                 "total_execution_time": total_execution_time,
                 "num_cursors": len(cursors),
                 "num_apps": len(apps),
+                "num_plugins": len(plugins),
                 "rate_limited_during_cursors": rate_limited_during_cursors,
                 "rate_limited_during_data": rate_limited_during_data,
+                "rate_limited_during_plugins": plugins_rate_limited,
                 "error": None,
             }
 
@@ -366,11 +433,14 @@ async def run_benchmark():
             return {
                 "cursor_fetch_time": None,
                 "data_fetch_time": None,
+                "plugins_fetch_time": None,
                 "total_execution_time": None,
                 "num_cursors": 0,
                 "num_apps": 0,
+                "num_plugins": 0,
                 "rate_limited_during_cursors": rate_limited_during_cursors,
                 "rate_limited_during_data": False,
+                "rate_limited_during_plugins": False,
                 "error": str(e),
             }
 
@@ -389,6 +459,7 @@ async def run_benchmark_with_retry():
             if (
                 result.get("rate_limited_during_cursors")
                 or result.get("rate_limited_during_data")
+                or result.get("rate_limited_during_plugins")
             ) and run_retry_count < max_run_retries:
                 run_retry_count += 1
                 # Calculate backoff time with exponential increase
@@ -415,11 +486,14 @@ async def run_benchmark_with_retry():
                 return {
                     "cursor_fetch_time": None,
                     "data_fetch_time": None,
+                    "plugins_fetch_time": None,
                     "total_execution_time": None,
                     "num_cursors": 0,
                     "num_apps": 0,
+                    "num_plugins": 0,
                     "rate_limited_during_cursors": False,
                     "rate_limited_during_data": False,
+                    "rate_limited_during_plugins": False,
                     "error": str(e),
                 }
 
