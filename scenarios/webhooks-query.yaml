@@ -1,0 +1,101 @@
+scenarios:
+  - name: "GraphQL Query Webhooks Timing Test"
+    flow:
+      - log: "Starting GraphQL request to fetch apps list"
+      - post:
+          url: "/"
+          headers:
+            Content-Type: "application/json"
+            Authorization: "Bearer {{ $processEnvironment.AUTH_TOKEN }}"
+          json:
+            query: |
+              query AppsList {
+                apps(
+                  first: 100
+                  sortBy: {
+                    direction: DESC,
+                    field: CREATION_DATE
+                  }
+                  filter: {
+                    type: LOCAL
+                  }
+                ) {
+                  pageInfo {
+                    hasNextPage
+                    hasPreviousPage
+                    startCursor
+                    endCursor
+                  }
+                  totalCount
+                  edges {
+                    node {
+                      id
+                      name
+                      isActive
+                      type
+                      appUrl
+                      manifestUrl
+                      version
+                      created
+                      brand {
+                        logo {
+                          default(format: WEBP, size: 64)
+                        }
+                      }
+                      permissions {
+                        name
+                        code
+                      }
+                      webhooks {
+                        failedDelivers: eventDeliveries(
+                          first: 1
+                          filter: {status: FAILED}
+                          sortBy: {field: CREATED_AT, direction: DESC}
+                        ) {
+                          edges {
+                            node {
+                              id
+                              createdAt
+                              attempts(first: 1, sortBy: {field: CREATED_AT, direction: DESC}) {
+                                edges {
+                                  node {
+                                    id
+                                    status
+                                    createdAt
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        pendingDelivers: eventDeliveries(
+                          first: 6
+                          filter: {status: PENDING}
+                          sortBy: {field: CREATED_AT, direction: DESC}
+                        ) {
+                          edges {
+                            node {
+                              id
+                              attempts(first: 6, sortBy: {field: CREATED_AT, direction: DESC}) {
+                                edges {
+                                  node {
+                                    id
+                                    status
+                                    createdAt
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+      #     capture:
+      #       - json: "$"
+      #         as: "data"
+      # - log: "Response data: {{ data }}"
+          expect:
+            - statusCode: 200

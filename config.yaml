@@ -3,6 +3,7 @@ config:
   phases:
     - duration: 100
       arrivalRate: 1
+      maxVusers: 1
       name: "One request per second"
   ensure:
     maxErrorRate: 1

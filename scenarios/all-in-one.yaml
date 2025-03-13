@@ -1,0 +1,164 @@
+scenarios:
+  - name: "GraphQL Query all entities Timing Test"
+    flow:
+      - log: "Starting GraphQL request to fetch apps list"
+      - post:
+          url: "/"
+          headers:
+            Content-Type: "application/json"
+            Authorization: "Bearer {{ $processEnvironment.AUTH_TOKEN }}"
+          json:
+            query: |
+              {
+                manifestApps: apps(first: 100) {
+                  edges {
+                    node {
+                      id
+                      name
+                      created
+                      isActive
+                      type
+                      brand {
+                        logo {
+                          default(format: WEBP, size: 24)
+                        }
+                      }
+                      webhooks {
+                        failedDelivers: eventDeliveries(
+                          first: 1
+                          filter: {status: FAILED}
+                          sortBy: {field: CREATED_AT, direction: DESC}
+                        ) {
+                          edges {
+                            node {
+                              id
+                              createdAt
+                              attempts(first: 1, sortBy: {field: CREATED_AT, direction: DESC}) {
+                                edges {
+                                  node {
+                                    id
+                                    status
+                                    createdAt
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        pendingDelivers: eventDeliveries(
+                          first: 6
+                          filter: {status: PENDING}
+                          sortBy: {field: CREATED_AT, direction: DESC}
+                        ) {
+                          edges {
+                            node {
+                              id
+                              attempts(first: 6, sortBy: {field: CREATED_AT, direction: DESC}) {
+                                edges {
+                                  node {
+                                    id
+                                    status
+                                    createdAt
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                localApps: apps(first: 100) {
+                  edges {
+                    node {
+                      id
+                      name
+                      created
+                      isActive
+                      type
+                      brand {
+                        logo {
+                          default(format: WEBP, size: 24)
+                        }
+                      }
+                      webhooks {
+                        failedDelivers: eventDeliveries(
+                          first: 1
+                          filter: {status: FAILED}
+                          sortBy: {field: CREATED_AT, direction: DESC}
+                        ) {
+                          edges {
+                            node {
+                              id
+                              createdAt
+                              attempts(first: 1, sortBy: {field: CREATED_AT, direction: DESC}) {
+                                edges {
+                                  node {
+                                    id
+                                    status
+                                    createdAt
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        pendingDelivers: eventDeliveries(
+                          first: 6
+                          filter: {status: PENDING}
+                          sortBy: {field: CREATED_AT, direction: DESC}
+                        ) {
+                          edges {
+                            node {
+                              id
+                              attempts(first: 6, sortBy: {field: CREATED_AT, direction: DESC}) {
+                                edges {
+                                  node {
+                                    id
+                                    status
+                                    createdAt
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                plugins(first: 20, filter: {}, sortBy: {direction: ASC, field: NAME}) {
+                  edges {
+                    node {
+                      id
+                      name
+                      description
+                      channelConfigurations {
+                        active
+                        channel {
+                          id
+                          name
+                          slug
+                        }
+                      }
+                      globalConfiguration {
+                        active
+                        channel {
+                          id
+                          name
+                          slug
+                        }
+                      }
+                    }
+                  }
+                  pageInfo {
+                    hasPreviousPage
+                    hasNextPage
+                    startCursor
+                    endCursor
+                  }
+                }
+              }
+          expect:
+            - statusCode: 200

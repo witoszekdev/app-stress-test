@@ -1,0 +1,77 @@
+config:
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{ $processEnvironment.AUTH_TOKEN }}"
+  processor: "./cursors-processor.cjs"
+
+scenarios:
+  - name: "Fetch cursors then items"
+    flow:
+      # Initialize variables to collect cursors
+      - function: "initCursors"
+      # Execute first query with no cursor initially
+      - post:
+          url: "/"
+          json:
+            query: |
+              query Apps($cursor: String) {
+                apps(first: 50, after: $cursor) {
+                  pageInfo {
+                    endCursor
+                  }
+                }
+              }
+            variables:
+              cursor: null
+          capture:
+            - json: "data.apps.pageInfo.endCursor"
+              as: "nextCursor"
+      # Custom function to accumulate the first returned cursor
+      - function: "appendCursor"
+      # Loop until the nextCursor is null or empty
+      - loop:
+        - post:
+            url: "/"
+            json:
+              query: |
+                query Apps($cursor: String) {
+                  apps(first: 50, after: $cursor) {
+                    pageInfo {
+                      endCursor
+                    }
+                  }
+                }
+              variables:
+                cursor: "{{ nextCursor }}"
+            capture:
+              - json: "data.apps.pageInfo.endCursor"
+                as: "nextCursor"
+            expect:
+              - statusCode: 200
+        - function: "appendCursor"
+        whileTrue: "{{ nextCursor == null || nextCursor == '' }}"
+      - log: "Fetched all cursors"
+      # Use for-each to iterate over the accumulated cursors array
+      - parallel:
+        - loop:
+            - post:
+                url: "/"
+                json:
+                  query: |
+                    query Apps($cursor: String) {
+                      apps(first: 10, after: $cursor) {
+                        edges {
+                          node {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                  variables:
+                    cursor: "{{ $loopElement }}"
+                  expect:
+                    - statusCode: 200
+          over: "allCursors"
+      - log: "Fetched all data"
