@@ -31,3 +31,6 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+benchmark_graphs_*/
+benchmark_results*.csv
