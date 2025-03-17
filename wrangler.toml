@@ -1,4 +1,4 @@
-name = "saleor-app-hono-pages-template"
+name = "saleor-app-stress-test"
 compatibility_date = "2025-01-03"
 pages_build_output_dir = "./dist"
 compatibility_flags = [ "nodejs_compat" ]
