@@ -28,6 +28,8 @@ app.get("/manifest", c => createManifestHandler({
   }
 })(c.req.raw));
 
+// app.post("/register", c => new Response("Error", { status: 500 }));
+
 app.post("/register", c => createAppRegisterHandler({
   apl: getApl(c),
 })(c.req.raw));

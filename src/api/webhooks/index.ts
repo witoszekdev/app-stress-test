@@ -29,7 +29,7 @@ app.post("/order-created", c => {
      */
     console.log(`Order was created for customer: ${payload.order?.userEmail}`);
 
-    return new Response("Accepted", { status: 200 })
+    return new Response("Rejected", { status: 500 })
   })(c.req.raw);
 })
 
